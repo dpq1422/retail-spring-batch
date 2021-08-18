@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:batch="http://www.springframework.org/schema/batch"
+    xmlns:util="http://www.springframework.org/schema/util"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/batch 
+    http://www.springframework.org/schema/batch/spring-batch-2.2.xsd
+    http://www.springframework.org/schema/beans 
+    http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+    http://www.springframework.org/schema/util 
+    http://www.springframework.org/schema/util/spring-util-3.2.xsd
+    ">
+
+  <!-- spring batch core settings -->
+  <import resource="../config/context.xml" />
+    
+  <!-- partitioner job -->
+  <job id="partitionJob" xmlns="http://www.springframework.org/schema/batch">
+        
+    <!-- master step, 10 threads (grid-size)  -->
+    <step id="masterStep">
+    <partition step="slave" partitioner="rangePartitioner">
+        <handler grid-size="10" task-executor="taskExecutor" />
+    </partition>
+    </step>
+        
+  </job>
+
+  <!-- each thread will run this job, with different stepExecutionContext values. -->
+  <step id="slave" xmlns="http://www.springframework.org/schema/batch">
+    <tasklet>
+        <chunk reader="cvsFileItemReader" writer="flatFileItemWriter"
+            processor="itemProcessor" commit-interval="1" />
+    </tasklet>
+  </step>
+
+  <bean id="rangePartitioner" class="com.retail.partitioner.DataPartitioner" />
+
+  <bean id="taskExecutor" class="org.springframework.core.task.SimpleAsyncTaskExecutor" />
+
+  <!-- inject stepExecutionContext -->
+  <bean id="itemProcessor" class="com.retail.processor.DataProcessor" scope="step">
+    <property name="threadName" value="#{stepExecutionContext[name]}" />
+  </bean>
+
+  <bean id="cvsFileItemReader" class="org.springframework.batch.item.file.FlatFileItemReader">
+
+    <!-- Read a csv file -->
+    <property name="resource" value="worldwiseCauseOfDeaths.csv" />
+
+     <property name="lineMapper">
+            <bean class="org.springframework.batch.item.file.mapping.PassThroughLineMapper" />
+     </property>
+        <property name="linesToSkip" value="1" />        
+        <property name="strict" value="true" />
+
+  </bean>
+
+  <!-- csv file writer -->
+  <bean id="flatFileItemWriter" class="org.springframework.batch.item.file.FlatFileItemWriter"
+    scope="step" >
+    <property name="resource"
+        value="file:csv/outputs/users.processed#{stepExecutionContext[fromId]}-#{stepExecutionContext[toId]}.csv" />
+    <property name="appendAllowed" value="false" />
+    <property name="lineAggregator">
+      <bean
+        class="org.springframework.batch.item.file.transform.DelimitedLineAggregator">
+        <property name="delimiter" value="," />
+        <property name="fieldExtractor">
+          <bean
+            class="org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor">
+            <property name="names" value="year, country, dataType, total, description, deaths, optional" />
+          </bean>
+        </property>
+      </bean>
+    </property>
+  </bean>
+
+</beans>
